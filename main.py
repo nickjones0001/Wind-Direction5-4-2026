@@ -8,61 +8,77 @@ import os
 import json
 
 # Configuration
-SHEET_NAME = "Wind+Dir"
+SHEET_NAME = "Wind+WaveScrapeLLM 28-3-2026"
+TAB_NAME = "Wind+Dir"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
-# Specific Geographic Nodes
+
+# Specified Geographical Locations
 STATIONS = {
-    "Frankston Beach": "https://www.bom.gov.au/vic/observations/melbourne.shtml", # Representative link; scrapers usually target specific ID/Table rows
-    "Fawkner Beacon": "https://www.bom.gov.au/vic/observations/melbourne.shtml",
-    "South Channel Island": "https://www.bom.gov.au/vic/observations/melbourne.shtml"
+    "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94870.json",
+    "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94864.json",
+    "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94857.json"
 }
 
 def get_wind_data():
-    # In a production environment, this would parse the specific table rows for each node
-    # Here we define the extraction logic for the specified headers
     results = []
-    now = datetime.datetime.now(TIMEZONE)
+    now_melbourne = datetime.datetime.now(TIMEZONE)
     
-    # Placeholder for scraping logic targeting specific BOM/Maritime rows
-    for station_name in STATIONS.keys():
-        # Scrape logic here... 
-        # Example data structure based on your headers:
-        row = [
-            now.strftime("%d/%m/%Y"),      # Observation_Date
-            now.strftime("%H:%M"),         # Observation_Time
-            station_name,                  # Geographic_Node
-            "15",                          # Wind_Speed_knots (Extracted)
-            "↗",                           # Wind_Visual (Directional Arrow)
-            "SW",                          # Wind_Direction
-            now.strftime("%d/%m/%Y"),      # Extracted_Date
-            now.strftime("%H:%M")          # Extracted_Time
-        ]
-        results.append(row)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+
+    for name, url in STATIONS.items():
+        try:
+            response = requests.get(url, headers=headers)
+            data = response.json()
+            # Get the most recent observation from the JSON list
+            latest_obs = data['observations']['data'][0]
+            
+            # Mapping BOM data to your headers
+            obs_date = latest_obs['local_date_time_full'][:8]
+            formatted_date = f"{obs_date[6:8]}/{obs_date[4:6]}/{obs_date[0:4]}"
+            obs_time = latest_obs['local_date_time_full'][8:12]
+            formatted_time = f"{obs_time[0:2]}:{obs_time[2:4]}"
+            
+            row = [
+                formatted_date,                    # Observation_Date
+                formatted_time,                    # Observation_Time
+                name,                              # Geographic_Node
+                latest_obs.get('wind_spd_kt', 0),  # Wind_Speed_knots
+                latest_obs.get('wind_dir', '-'),   # Wind_Visual (Placeholder for Dir)
+                latest_obs.get('wind_dir', '-'),   # Wind_Direction
+                now_melbourne.strftime("%d/%m/%Y"),# Extracted_Date
+                now_melbourne.strftime("%H:%M:%S") # Extracted_Time
+            ]
+            results.append(row)
+        except Exception as e:
+            print(f"Error fetching data for {name}: {e}")
+            
     return results
 
 def update_sheet():
-    # Authenticate
+    # Authenticate using GitHub Secret
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(os.environ['GOOGLE_CREDENTIALS'])
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     
-    # Open Sheet
+    # Open the specific Sheet and Tab
+    sh = client.open(SHEET_NAME)
     try:
-        sh = client.open("Maritime_Wind_Data") # Ensure your Google Sheet is named this
-        worksheet = sh.worksheet(SHEET_NAME)
+        worksheet = sh.worksheet(TAB_NAME)
     except gspread.exceptions.WorksheetNotFound:
-        # Create sheet if it doesn't exist with headers
-        sh = client.open("Maritime_Wind_Data")
-        worksheet = sh.add_worksheet(title=SHEET_NAME, rows="1000", cols="8")
+        # Create tab if missing
+        worksheet = sh.add_worksheet(title=TAB_NAME, rows="1000", cols="8")
         headers = ["Observation_Date", "Observation_Time", "Geographic_Node", "Wind_Speed_knots", "Wind_Visual", "Wind_Direction", "Extracted_Date", "Extracted_Time"]
         worksheet.append_row(headers)
 
-    data = get_wind_data()
+    new_data = get_wind_data()
     
-    # Insert at row 2 (below headers) to keep most recent at the top
-    for row in data:
-        worksheet.insert_row(row, 2)
+    # Insert from bottom up (Newest at Top)
+    # We insert at row 2 to keep the header at row 1
+    if new_data:
+        worksheet.insert_rows(new_data, row=2)
 
 if __name__ == "__main__":
     update_sheet()
