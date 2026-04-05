@@ -2,8 +2,8 @@ name: Hourly Wind Scraper
 
 on:
   schedule:
-    - cron: '0 * * * *' # Executes at the start of every hour
-  workflow_dispatch: # Allows you to run it manually for testing
+    - cron: '0 * * * *'
+  workflow_dispatch:
 
 jobs:
   scrape_and_update:
@@ -13,13 +13,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.12'
 
       - name: Install Dependencies
         run: |
-          pip install gspread google-auth requests pytz
+          python -m pip install --upgrade pip
+          pip install gspread google-auth requests pytz beautifulsoup4
 
       - name: Run Scraper
         env:
