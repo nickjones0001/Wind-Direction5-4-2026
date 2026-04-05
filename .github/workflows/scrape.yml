@@ -1,25 +1,25 @@
-name: Maritime Wind Scraper
+name: Hourly Wind Scraper
 
 on:
   schedule:
-    - cron: '0 * * * *' # Runs every hour
-  workflow_dispatch: # Allows manual trigger
+    - cron: '0 * * * *' # Executes at the start of every hour
+  workflow_dispatch: # Allows you to run it manually for testing
 
 jobs:
-  build:
+  scrape_and_update:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: |
-          pip install gspread google-auth requests beautifulsoup4 pytz
+          pip install gspread google-auth requests pytz
 
       - name: Run Scraper
         env:
