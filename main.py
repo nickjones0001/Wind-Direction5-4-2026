@@ -11,6 +11,15 @@ SHEET_NAME = "Wind+WaveScrapeLLM 28-3-2026"
 TAB_NAME = "Wind+Dir"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
+# Mapping Compass Directions to Visual Arrows
+DIRECTION_ARROWS = {
+    "N": "↓", "NNE": "↓", "NE": "↙", "ENE": "←",
+    "E": "←", "ESE": "←", "SE": "↖", "SSE": "↑",
+    "S": "↑", "SSW": "↑", "SW": "↗", "WSW": "→",
+    "W": "→", "WNW": "→", "NW": "↘", "NNW": "↓",
+    "CALM": "○", "-": "-"
+}
+
 # Specified Geographical Locations (BOM JSON feeds)
 STATIONS = {
     "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94870.json",
@@ -36,15 +45,18 @@ def get_wind_data():
             
             # Wind Speed & Direction
             speed = latest_obs.get('wind_spd_kt', 0)
-            direction = latest_obs.get('wind_dir', '-')
+            text_dir = latest_obs.get('wind_dir', '-')
+            
+            # Get the visual arrow symbol
+            visual_arrow = DIRECTION_ARROWS.get(text_dir, text_dir)
             
             row = [
                 obs_date,                          # Observation_Date
                 obs_time,                          # Observation_Time
                 name,                              # Geographic_Node
                 speed,                             # Wind_Speed_knots
-                direction,                         # Wind_Visual
-                direction,                         # Wind_Direction
+                visual_arrow,                      # Wind_Visual (Now with Arrows)
+                text_dir,                          # Wind_Direction (Text)
                 now_melbourne.strftime("%d/%m/%Y"),# Extracted_Date
                 now_melbourne.strftime("%H:%M:%S") # Extracted_Time
             ]
@@ -80,7 +92,7 @@ def update_sheet():
     if new_rows:
         # Insert at row 2 to keep newest data at the top
         worksheet.insert_rows(new_rows, row=2)
-        print(f"Successfully added {len(new_rows)} rows.")
+        print(f"Successfully added {len(new_rows)} rows with arrows.")
 
 if __name__ == "__main__":
     update_sheet()
