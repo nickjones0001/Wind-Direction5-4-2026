@@ -74,7 +74,7 @@ def update_sheet():
         
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
-        dynamic_width = BASE_WIDTH + (total_rows * PIXELS_PER_ROW)
+        dynamic_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
         metadata = sh.fetch_sheet_metadata()
         target_chart = None
@@ -142,7 +142,7 @@ def update_sheet():
                                         "rowIndex": 0,
                                         "columnIndex": 6
                                     },
-                                    "widthPixels": int(dynamic_width),
+                                    "widthPixels": dynamic_width,
                                     "heightPixels": int(CHART_HEIGHT)
                                 }
                             },
