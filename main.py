@@ -93,9 +93,41 @@ def update_sheet():
                         "updateChartSpec": {
                             "chartId": chart_id,
                             "spec": {
+                                "title": "Port Phillip Wind Speed (Knots)",
                                 "basicChart": {
-                                    "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
-                                    "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
+                                    "chartType": "LINE",  # Explicitly defined to fix 400 error
+                                    "legendPosition": "BOTTOM_LEGEND",
+                                    "domains": [
+                                        {
+                                            "domain": {
+                                                "sourceRange": {
+                                                    "sources": [{
+                                                        "sheetId": data_ws.id, 
+                                                        "startRowIndex": 0, 
+                                                        "endRowIndex": total_rows, 
+                                                        "startColumnIndex": 8, 
+                                                        "endColumnIndex": 9
+                                                    }]
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "series": [
+                                        {
+                                            "series": {
+                                                "sourceRange": {
+                                                    "sources": [{
+                                                        "sheetId": data_ws.id, 
+                                                        "startRowIndex": 0, 
+                                                        "endRowIndex": total_rows, 
+                                                        "startColumnIndex": 3, 
+                                                        "endColumnIndex": 4
+                                                    }]
+                                                }
+                                            },
+                                            "targetAxis": "LEFT_AXIS"
+                                        }
+                                    ]
                                 }
                             }
                         }
@@ -120,9 +152,4 @@ def update_sheet():
                 ]
             }
             sh.batch_update(requests_body)
-            print(f"Updated: Row {total_rows} | Width {dynamic_width}px")
-        else:
-            print("No chart found on Pivot tab.")
-
-if __name__ == "__main__":
-    update_sheet()
+            print(f"Successfully updated row {total_rows} and stretched chart
