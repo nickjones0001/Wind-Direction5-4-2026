@@ -57,7 +57,9 @@ def get_wind_data():
 def update_sheet():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    if not creds_json: return
+    if not creds_json: 
+        print("Credentials not found.")
+        return
     creds_dict = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
@@ -85,48 +87,15 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
-            # The API requires updating the specific chart type (usually basicChart)
-            # We preserve the existing chart's type and update only the range
             requests_body = {
                 "requests": [
                     {
                         "updateChartSpec": {
                             "chartId": chart_id,
                             "spec": {
-                                "title": "Wind Speed Profile",
                                 "basicChart": {
-                                    "chartType": target_chart['spec'].get('basicChart', {}).get('chartType', 'LINE'),
-                                    "domains": [
-                                        {
-                                            "domain": {
-                                                "sourceRange": {
-                                                    "sources": [{
-                                                        "sheetId": data_ws.id,
-                                                        "startRowIndex": 0,
-                                                        "endRowIndex": total_rows,
-                                                        "startColumnIndex": 8, # Column I (Time Label)
-                                                        "endColumnIndex": 9
-                                                    }]
-                                                }
-                                            }
-                                        }
-                                    ],
-                                    "series": [
-                                        {
-                                            "series": {
-                                                "sourceRange": {
-                                                    "sources": [{
-                                                        "sheetId": data_ws.id,
-                                                        "startRowIndex": 0,
-                                                        "endRowIndex": total_rows,
-                                                        "startColumnIndex": 3, # Column D (Wind Speed)
-                                                        "endColumnIndex": 4
-                                                    }]
-                                                }
-                                            },
-                                            "targetAxis": "LEFT_AXIS"
-                                        }
-                                    ]
+                                    "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
+                                    "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
                                 }
                             }
                         }
@@ -141,8 +110,8 @@ def update_sheet():
                                         "rowIndex": 0,
                                         "columnIndex": 6
                                     },
-                                    "widthPixels": dynamic_width,
-                                    "heightPixels": CHART_HEIGHT
+                                    "widthPixels": int(dynamic_width),
+                                    "heightPixels": int(CHART_HEIGHT)
                                 }
                             },
                             "fields": "newPosition.overlayPosition"
@@ -151,9 +120,9 @@ def update_sheet():
                 ]
             }
             sh.batch_update(requests_body)
-            print(f"Success: Updated row {total_rows} and widened chart to {dynamic_width}px.")
+            print(f"Updated: Row {total_rows} | Width {dynamic_width}px")
         else:
-            print("No chart found.")
+            print("No chart found on Pivot tab.")
 
 if __name__ == "__main__":
     update_sheet()
