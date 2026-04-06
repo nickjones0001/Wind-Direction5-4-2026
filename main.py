@@ -57,34 +57,42 @@ def get_wind_data():
 def update_sheet():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    if not creds_json: return
+    if not creds_json: 
+        print("Missing Credentials")
+        return
     creds_dict = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
     sh = client.open(SHEET_NAME)
     
-    # Get Worksheets
     data_ws = sh.worksheet(DATA_TAB)
     pivot_ws = sh.worksheet(PIVOT_TAB)
 
-    # Insert new data
     new_rows = get_wind_data()
     if new_rows:
         data_ws.insert_rows(new_rows, row=2)
         
-        # Calculate dynamic width
+        # Calculate row count and new width
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
         dynamic_width = BASE_WIDTH + (total_rows * PIXELS_PER_ROW)
 
-        charts = pivot_ws.get_all_charts()
-        if charts:
-            chart_id = charts[0].id
-            
+        # CORRECT WAY TO FIND CHART ID:
+        # Fetch metadata for the entire spreadsheet to find the chart on the Pivot Tab
+        metadata = sh.fetch_sheet_metadata()
+        chart_id = None
+        
+        for sheet in metadata['sheets']:
+            if sheet['properties']['title'] == PIVOT_TAB:
+                if 'charts' in sheet:
+                    # Get the ID of the first chart found on that tab
+                    chart_id = sheet['charts'][0]['chartId']
+                    break
+
+        if chart_id is not None:
             requests_body = {
                 "requests": [
                     {
-                        # Part 1: Update the Data Range inside the chart
                         "updateChartSpec": {
                             "chartId": chart_id,
                             "spec": {
@@ -103,7 +111,6 @@ def update_sheet():
                         }
                     },
                     {
-                        # Part 2: Physically stretch the box starting from Column G
                         "updateEmbeddedObjectPosition": {
                             "objectId": chart_id,
                             "newPosition": {
@@ -111,7 +118,7 @@ def update_sheet():
                                     "anchorCell": {
                                         "sheetId": pivot_ws.id, 
                                         "rowIndex": 0,    # Row 1
-                                        "columnIndex": 6  # Column G (Index 6)
+                                        "columnIndex": 6  # Column G
                                     },
                                     "widthPixels": dynamic_width,
                                     "heightPixels": CHART_HEIGHT
@@ -123,7 +130,9 @@ def update_sheet():
                 ]
             }
             sh.batch_update(requests_body)
-            print(f"Updated: Row count {total_rows} | Chart width {dynamic_width}px | Anchored at G1")
+            print(f"Success: Updated row {total_rows} and widened chart to {dynamic_width}px.")
+        else:
+            print(f"Error: No chart found on the tab '{PIVOT_TAB}'.")
 
 if __name__ == "__main__":
     update_sheet()
