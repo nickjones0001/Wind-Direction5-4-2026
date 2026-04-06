@@ -13,9 +13,9 @@ PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
 # Scaling Settings
-BASE_WIDTH = 800      # Starting width in pixels
-PIXELS_PER_ROW = 3    # Increase this to make it stretch faster
-CHART_HEIGHT = 450    # Fixed height
+BASE_WIDTH = 800      
+PIXELS_PER_ROW = 3    
+CHART_HEIGHT = 450    
 
 DIRECTION_ARROWS = {
     "N": "↑", "NNE": "↗", "NE": "↗", "ENE": "→",
@@ -57,9 +57,7 @@ def get_wind_data():
 def update_sheet():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    if not creds_json: 
-        print("Missing Credentials")
-        return
+    if not creds_json: return
     creds_dict = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
     client = gspread.authorize(creds)
@@ -72,38 +70,61 @@ def update_sheet():
     if new_rows:
         data_ws.insert_rows(new_rows, row=2)
         
-        # Calculate row count and new width
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
         dynamic_width = BASE_WIDTH + (total_rows * PIXELS_PER_ROW)
 
-        # CORRECT WAY TO FIND CHART ID:
-        # Fetch metadata for the entire spreadsheet to find the chart on the Pivot Tab
         metadata = sh.fetch_sheet_metadata()
-        chart_id = None
-        
+        target_chart = None
         for sheet in metadata['sheets']:
             if sheet['properties']['title'] == PIVOT_TAB:
                 if 'charts' in sheet:
-                    # Get the ID of the first chart found on that tab
-                    chart_id = sheet['charts'][0]['chartId']
+                    target_chart = sheet['charts'][0]
                     break
 
-        if chart_id is not None:
+        if target_chart:
+            chart_id = target_chart['chartId']
+            
+            # The API requires updating the specific chart type (usually basicChart)
+            # We preserve the existing chart's type and update only the range
             requests_body = {
                 "requests": [
                     {
                         "updateChartSpec": {
                             "chartId": chart_id,
                             "spec": {
-                                "sourceRange": {
-                                    "sources": [
+                                "title": "Wind Speed Profile",
+                                "basicChart": {
+                                    "chartType": target_chart['spec'].get('basicChart', {}).get('chartType', 'LINE'),
+                                    "domains": [
                                         {
-                                            "sheetId": data_ws.id,
-                                            "startRowIndex": 0,
-                                            "endRowIndex": total_rows,
-                                            "startColumnIndex": 0,
-                                            "endColumnIndex": 5
+                                            "domain": {
+                                                "sourceRange": {
+                                                    "sources": [{
+                                                        "sheetId": data_ws.id,
+                                                        "startRowIndex": 0,
+                                                        "endRowIndex": total_rows,
+                                                        "startColumnIndex": 8, # Column I (Time Label)
+                                                        "endColumnIndex": 9
+                                                    }]
+                                                }
+                                            }
+                                        }
+                                    ],
+                                    "series": [
+                                        {
+                                            "series": {
+                                                "sourceRange": {
+                                                    "sources": [{
+                                                        "sheetId": data_ws.id,
+                                                        "startRowIndex": 0,
+                                                        "endRowIndex": total_rows,
+                                                        "startColumnIndex": 3, # Column D (Wind Speed)
+                                                        "endColumnIndex": 4
+                                                    }]
+                                                }
+                                            },
+                                            "targetAxis": "LEFT_AXIS"
                                         }
                                     ]
                                 }
@@ -117,8 +138,8 @@ def update_sheet():
                                 "overlayPosition": {
                                     "anchorCell": {
                                         "sheetId": pivot_ws.id, 
-                                        "rowIndex": 0,    # Row 1
-                                        "columnIndex": 6  # Column G
+                                        "rowIndex": 0,
+                                        "columnIndex": 6
                                     },
                                     "widthPixels": dynamic_width,
                                     "heightPixels": CHART_HEIGHT
@@ -132,7 +153,7 @@ def update_sheet():
             sh.batch_update(requests_body)
             print(f"Success: Updated row {total_rows} and widened chart to {dynamic_width}px.")
         else:
-            print(f"Error: No chart found on the tab '{PIVOT_TAB}'.")
+            print("No chart found.")
 
 if __name__ == "__main__":
     update_sheet()
