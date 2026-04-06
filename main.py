@@ -14,7 +14,7 @@ PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
 # Scaling Settings
-BASE_WIDTH = 800      
+BASE_WIDTH = 1600      
 PIXELS_PER_ROW = 300    
 CHART_HEIGHT = 450    
 
