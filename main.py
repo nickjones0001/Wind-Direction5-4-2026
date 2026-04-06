@@ -13,9 +13,9 @@ DATA_TAB = "Wind+Dir"
 PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# --- TEST VALUES (Force Wide) ---
-BASE_WIDTH = 2500      
-PIXELS_PER_ROW = 5    
+# --- Scaling Settings ---
+BASE_WIDTH = 1200      
+PIXELS_PER_ROW = 4    
 CHART_HEIGHT = 500    
 
 DIRECTION_ARROWS = {
@@ -76,7 +76,7 @@ def update_sheet():
         total_rows = len(all_data)
         calc_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
-        # 1. Find and Delete Existing Charts
+        # 1. Clean up old charts
         metadata = sh.fetch_sheet_metadata()
         delete_requests = []
         for sheet in metadata['sheets']:
@@ -85,17 +85,34 @@ def update_sheet():
                     for chart in sheet['charts']:
                         delete_requests.append({"deleteEmbeddedObject": {"objectId": chart['chartId']}})
 
-        # 2. Prepare the NEW Chart Request
+        # 2. Add New Multi-Series Chart
         add_chart_request = {
             "addChart": {
                 "chart": {
                     "spec": {
-                        "title": "Wind Speed Profile (Dynamic)",
+                        "title": "Port Phillip Bay Wind Conditions",
                         "basicChart": {
                             "chartType": "LINE",
                             "legendPosition": "BOTTOM_LEGEND",
-                            "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
-                            "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
+                            "domains": [{
+                                "domain": {
+                                    "sourceRange": {
+                                        "sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]
+                                    }
+                                }
+                            }],
+                            "series": [
+                                {
+                                    "series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}},
+                                    "targetAxis": "LEFT_AXIS",
+                                    "label": "Wind Speed (knots)"
+                                },
+                                {
+                                    "series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 4, "endColumnIndex": 5}]}},
+                                    "targetAxis": "LEFT_AXIS",
+                                    "label": "Direction Visual"
+                                }
+                            ]
                         }
                     },
                     "position": {
@@ -109,9 +126,8 @@ def update_sheet():
             }
         }
 
-        # Combine: Delete old, add new
+        # Combine and Execute
         full_requests = delete_requests + [add_chart_request]
-        
         auth_req = google.auth.transport.requests.Request()
         creds.refresh(auth_req)
         headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
@@ -120,7 +136,7 @@ def update_sheet():
         response = requests.post(url, headers=headers, data=json.dumps({"requests": full_requests}))
         
         if response.status_code == 200:
-            print(f"RECREATED CHART: Width {calc_width}px starting at Column G.")
+            print(f"RECREATED MULTI-SERIES CHART: Width {calc_width}px.")
         else:
             print(f"FAILURE: {response.text}")
 
