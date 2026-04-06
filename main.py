@@ -13,10 +13,9 @@ DATA_TAB = "Wind+Dir"
 PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# --- STRESS TEST VALUES ---
-# Setting these very high to force a visible change
+# --- TEST VALUES (Force Wide) ---
 BASE_WIDTH = 2500      
-PIXELS_PER_ROW = 10    
+PIXELS_PER_ROW = 5    
 CHART_HEIGHT = 500    
 
 DIRECTION_ARROWS = {
@@ -53,7 +52,7 @@ def get_wind_data():
                    now_melbourne.strftime("%d/%m/%Y"), now_melbourne.strftime("%H:%M:%S"), obs_datetime_label]
             results.append(row)
         except Exception as e:
-            print(f"Error fetching data for {name}: {e}")
+            print(f"Error: {e}")
     return results
 
 def update_sheet():
@@ -77,66 +76,53 @@ def update_sheet():
         total_rows = len(all_data)
         calc_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
+        # 1. Find and Delete Existing Charts
         metadata = sh.fetch_sheet_metadata()
-        target_chart = None
+        delete_requests = []
         for sheet in metadata['sheets']:
             if sheet['properties']['title'] == PIVOT_TAB:
                 if 'charts' in sheet:
-                    target_chart = sheet['charts'][0]
-                    break
+                    for chart in sheet['charts']:
+                        delete_requests.append({"deleteEmbeddedObject": {"objectId": chart['chartId']}})
 
-        if target_chart:
-            chart_id = target_chart['chartId']
-            
-            # THE FORCE UPDATE PAYLOAD
-            requests_body = {
-                "requests": [
-                    {
-                        "updateChartSpec": {
-                            "chartId": chart_id,
-                            "spec": {
-                                "title": "Wind Speed Profile (Knots)",
-                                "basicChart": {
-                                    "chartType": "LINE",
-                                    "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
-                                    "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
-                                }
-                            }
+        # 2. Prepare the NEW Chart Request
+        add_chart_request = {
+            "addChart": {
+                "chart": {
+                    "spec": {
+                        "title": "Wind Speed Profile (Dynamic)",
+                        "basicChart": {
+                            "chartType": "LINE",
+                            "legendPosition": "BOTTOM_LEGEND",
+                            "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
+                            "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
                         }
                     },
-                    {
-                        "updateEmbeddedObjectPosition": {
-                            "objectId": chart_id,
-                            "newPosition": {
-                                "overlayPosition": {
-                                    "anchorCell": {
-                                        "sheetId": pivot_ws.id, 
-                                        "rowIndex": 0,    # Row 1
-                                        "columnIndex": 6  # Column G
-                                    },
-                                    "widthPixels": calc_width,
-                                    "heightPixels": int(CHART_HEIGHT)
-                                }
-                            },
-                            "fields": "newPosition" # Aggressive mask to overwrite all position properties
+                    "position": {
+                        "overlayPosition": {
+                            "anchorCell": {"sheetId": pivot_ws.id, "rowIndex": 0, "columnIndex": 6},
+                            "widthPixels": calc_width,
+                            "heightPixels": int(CHART_HEIGHT)
                         }
                     }
-                ]
+                }
             }
-            
-            auth_req = google.auth.transport.requests.Request()
-            creds.refresh(auth_req)
-            headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
-            url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
-            
-            response = requests.post(url, headers=headers, data=json.dumps(requests_body))
-            
-            if response.status_code == 200:
-                print(f"SUCCESS: Data updated. Force-applied width: {calc_width}px.")
-            else:
-                print(f"ERROR {response.status_code}: {response.text}")
+        }
+
+        # Combine: Delete old, add new
+        full_requests = delete_requests + [add_chart_request]
+        
+        auth_req = google.auth.transport.requests.Request()
+        creds.refresh(auth_req)
+        headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
+        
+        response = requests.post(url, headers=headers, data=json.dumps({"requests": full_requests}))
+        
+        if response.status_code == 200:
+            print(f"RECREATED CHART: Width {calc_width}px starting at Column G.")
         else:
-            print(f"CHART NOT FOUND on tab '{PIVOT_TAB}'.")
+            print(f"FAILURE: {response.text}")
 
 if __name__ == "__main__":
     update_sheet()
