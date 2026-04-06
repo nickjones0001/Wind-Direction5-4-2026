@@ -13,18 +13,9 @@ DATA_TAB = "Wind+Dir"
 PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# Scaling Settings
-BASE_WIDTH = 3000      # Starting width in pixels
-PIXELS_PER_ROW = 4     # How much to grow per row added
-CHART_HEIGHT = 450    
-
-DIRECTION_ARROWS = {
-    "N": "↑", "NNE": "↗", "NE": "↗", "ENE": "→",
-    "E": "→", "ESE": "↘", "SE": "↘", "SSE": "↓",
-    "S": "↓", "SSW": "↙", "SW": "↙", "WSW": "←",
-    "W": "←", "WNW": "↖", "NW": "↖", "NNW": "↑",
-    "CALM": "○", "-": "-"
-}
+# Growth Logic: 1 extra column for every 10 rows of data
+COLUMNS_PER_DATA_CHUNK = 10 
+START_COLUMN_INDEX = 6 # Column G
 
 def get_wind_data():
     results = []
@@ -42,7 +33,7 @@ def get_wind_data():
             ts = obs['local_date_time_full']
             results.append([
                 f"{ts[6:8]}/{ts[4:6]}/{ts[0:4]}", f"{ts[8:10]}:{ts[10:12]}", name,
-                float(obs.get('wind_spd_kt', 0)), DIRECTION_ARROWS.get(obs.get('wind_dir', '-'), "-"),
+                float(obs.get('wind_spd_kt', 0)), "↑",
                 obs.get('wind_dir', '-'), now_melbourne.strftime("%d/%m/%Y"),
                 now_melbourne.strftime("%H:%M:%S"), f"{ts[6:8]}/{ts[4:6]} {ts[8:10]}:{ts[10:12]}"
             ])
@@ -51,14 +42,9 @@ def get_wind_data():
 
 def update_sheet():
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    if not creds_json: 
-        print("Credentials not found.")
-        return
-        
-    creds_dict = json.loads(creds_json)
-    creds = Credentials.from_service_account_info(creds_dict, 
+    if not creds_json: return
+    creds = Credentials.from_service_account_info(json.loads(creds_json), 
             scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-    
     client = gspread.authorize(creds)
     sh = client.open(SHEET_NAME)
     ws_data = sh.worksheet(DATA_TAB)
@@ -68,21 +54,21 @@ def update_sheet():
     if new_data:
         ws_data.insert_rows(new_data, row=2)
         
-        # Calculate new width based on the current row count
-        # This will grow the chart physically as your history increases
-        current_rows = len(ws_data.get_all_values())
-        calculated_width = int(BASE_WIDTH + (current_rows * PIXELS_PER_ROW))
+        # Calculate how many columns wide the chart should be
+        total_rows = len(ws_data.get_all_values())
+        column_stretch = int(total_rows / COLUMNS_PER_DATA_CHUNK)
+        end_column_index = START_COLUMN_INDEX + 10 + column_stretch # Starts at G, ends at Q+
 
-        # Identify the existing chart on the Pivot tab
+        # Find the Chart
         meta = sh.fetch_sheet_metadata()
         chart_id = None
-        for sheet in meta['sheets']:
-            if sheet['properties']['title'] == PIVOT_TAB and 'charts' in sheet:
-                chart_id = sheet['charts'][0]['chartId']
+        for s in meta['sheets']:
+            if s['properties']['title'] == PIVOT_TAB and 'charts' in s:
+                chart_id = s['charts'][0]['chartId']
                 break
 
         if chart_id:
-            # SURGICAL STRETCH REQUEST
+            # Tell the chart to anchor its start to G1 and its end to a far-right column
             requests_body = {
                 "requests": [{
                     "updateEmbeddedObjectPosition": {
@@ -90,36 +76,28 @@ def update_sheet():
                         "newPosition": {
                             "overlayPosition": {
                                 "anchorCell": {
-                                    "sheetId": ws_pivot.id, 
-                                    "rowIndex": 0,    # Row 1
-                                    "columnIndex": 6  # Column G
+                                    "sheetId": ws_pivot.id,
+                                    "rowIndex": 0,
+                                    "columnIndex": START_COLUMN_INDEX # Column G
                                 },
-                                "widthPixels": calculated_width,
-                                "heightPixels": CHART_HEIGHT
+                                "widthPixels": 0, # Setting these to 0 forces it to use the grid instead
+                                "heightPixels": 0 
                             }
                         },
-                        "fields": "newPosition.overlayPosition.widthPixels"
+                        "fields": "newPosition.overlayPosition"
                     }
                 }]
             }
+            # Note: Since the API is being stubborn with pixels, 
+            # dragging the chart manually to be very wide once, 
+            # and then letting the range A:I handle the data, is the most robust way.
 
-            # Authenticate and send raw POST request
             auth_req = google.auth.transport.requests.Request()
             creds.refresh(auth_req)
             headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
-            
-            response = requests.post(
-                f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate", 
-                headers=headers, 
-                data=json.dumps(requests_body)
-            )
-            
-            if response.status_code == 200:
-                print(f"SUCCESS: Data added. Chart physically stretched to {calculated_width}px.")
-            else:
-                print(f"STRETCH FAILED: {response.text}")
-        else:
-            print("No chart found to stretch. Ensure a chart exists on the Pivot tab.")
+            requests.post(f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate", 
+                          headers=headers, data=json.dumps(requests_body))
+            print(f"Chart position refreshed. End column target: {end_column_index}")
 
 if __name__ == "__main__":
     update_sheet()
