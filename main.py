@@ -1,5 +1,6 @@
 import gspread
 from google.oauth2.service_account import Credentials
+import google.auth.transport.requests
 import requests
 import datetime
 import pytz
@@ -60,8 +61,11 @@ def update_sheet():
     if not creds_json: 
         print("Credentials not found.")
         return
+    
     creds_dict = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
+    
+    # Authorize gspread for data insertion
     client = gspread.authorize(creds)
     sh = client.open(SHEET_NAME)
     
@@ -76,6 +80,7 @@ def update_sheet():
         total_rows = len(all_data)
         dynamic_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
+        # Get metadata to find the chart
         metadata = sh.fetch_sheet_metadata()
         target_chart = None
         for sheet in metadata['sheets']:
@@ -87,7 +92,7 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
-            # Formulate the raw JSON request
+            # Prepare the raw JSON request body
             requests_body = {
                 "requests": [
                     {
@@ -124,11 +129,22 @@ def update_sheet():
                 ]
             }
             
-            # Send the request directly via the client's internal request method
-            url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
-            sh.client.request("post", url, json=requests_body)
+            # Manually get a fresh access token to bypass gspread's formatting
+            auth_req = google.auth.transport.requests.Request()
+            creds.refresh(auth_req)
             
-            print(f"Success: Updated row {total_rows} and stretched chart to {dynamic_width}px.")
+            headers = {
+                "Authorization": f"Bearer {creds.token}",
+                "Content-Type": "application/json"
+            }
+            
+            url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
+            api_res = requests.post(url, headers=headers, data=json.dumps(requests_body))
+            
+            if api_res.status_code == 200:
+                print(f"Success: Updated row {total_rows} and widened chart to {dynamic_width}px.")
+            else:
+                print(f"API Error: {api_res.status_code} - {api_res.text}")
         else:
             print("No chart found on Pivot tab.")
 
