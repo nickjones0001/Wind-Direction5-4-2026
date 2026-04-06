@@ -74,6 +74,7 @@ def update_sheet():
         
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
+        # Ensure width is an integer
         dynamic_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
         metadata = sh.fetch_sheet_metadata()
@@ -87,6 +88,7 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
+            # Request payload using strict Google API camelCase keys
             requests_body = {
                 "requests": [
                     {
