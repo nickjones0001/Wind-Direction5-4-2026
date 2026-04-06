@@ -11,8 +11,7 @@ SHEET_NAME = "Wind+WaveScrapeLLM 28-3-2026"
 TAB_NAME = "Wind+Dir"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# Mapping Compass Directions to Degrees (Where wind is COMING FROM)
-# 0 = North, 90 = East, 180 = South, 270 = West
+# Mapping Compass Directions to Degrees
 DIRECTION_DEGREES = {
     "N": 0, "NNE": 22.5, "NE": 45, "ENE": 67.5,
     "E": 90, "ESE": 112.5, "SE": 135, "SSE": 157.5,
@@ -21,7 +20,15 @@ DIRECTION_DEGREES = {
     "CALM": 0
 }
 
-# Specified Geographical Locations
+# 16-point Visual Arrow mapping
+DIRECTION_ARROWS = {
+    "N": "↑", "NNE": "↗", "NE": "↗", "ENE": "→",
+    "E": "→", "ESE": "↘", "SE": "↘", "SSE": "↓",
+    "S": "↓", "SSW": "↙", "SW": "↙", "WSW": "←",
+    "W": "←", "WNW": "↖", "NW": "↖", "NNW": "↑",
+    "CALM": "○", "-": "-"
+}
+
 STATIONS = {
     "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94870.json",
     "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94864.json",
@@ -40,32 +47,22 @@ def get_wind_data():
             latest_obs = data['observations']['data'][0]
             
             raw_ts = latest_obs['local_date_time_full']
-            obs_date = f"{raw_ts[6:8]}/{raw_ts[4:6]}/{raw_ts[0:4]}"
-            obs_time = f"{raw_ts[8:10]}:{raw_ts[10:12]}"
+            # READABLE FORMAT: "DD/MM HH:MM"
+            # Example: "06/04 10:00"
+            obs_label = f"{raw_ts[6:8]}/{raw_ts[4:6]} {raw_ts[8:10]}:{raw_ts[10:12]}"
             
-            speed = latest_obs.get('wind_spd_kt', 0)
+            speed = float(latest_obs.get('wind_spd_kt', 0))
             text_dir = latest_obs.get('wind_dir', '-')
+            bearing = float(DIRECTION_DEGREES.get(text_dir, 0))
+            arrow = DIRECTION_ARROWS.get(text_dir, "-")
             
-            # Get Bearing
-            bearing = DIRECTION_DEGREES.get(text_dir, 0)
-            
-            # Using a dynamic SVG placeholder to create a rotated arrow
-            # This URL generates a small black arrow pointing to the source bearing
-            # We use the =IMAGE formula so Google Sheets renders the graphic
-            image_url = f"https://www.google.com/chart?chs=50x50&cht=gom&chld={bearing}|arrow"
-            # Note: Since the Google Chart 'gom' meter is deprecated in some regions, 
-            # we use a fallback formula logic that points to a hosted arrow asset:
-            visual_formula = f'=IMAGE("https://api.qrserver.com/v1/create-qr-code/?data=DIR_{bearing}")' 
-            
-            # PREFERRED METHOD: Using the text direction as a label for the chart, 
-            # but providing the specific degree for the data processing
             row = [
-                obs_date,                          # Observation_Date
-                obs_time,                          # Observation_Time
+                obs_label,                         # Combined Date/Time for X-Axis
                 name,                              # Geographic_Node
                 speed,                             # Wind_Speed_knots
-                text_dir,                          # Wind_Visual (Label for Chart)
-                bearing,                           # Wind_Direction (Numeric Degree)
+                arrow,                             # Wind_Visual (Label)
+                text_dir,                          # Wind_Direction (Text)
+                bearing,                           # Wind_Direction (Numeric)
                 now_melbourne.strftime("%d/%m/%Y"),# Extracted_Date
                 now_melbourne.strftime("%H:%M:%S") # Extracted_Time
             ]
@@ -84,7 +81,11 @@ def update_sheet():
     client = gspread.authorize(creds)
     
     sh = client.open(SHEET_NAME)
-    worksheet = sh.worksheet(TAB_NAME)
+    try:
+        worksheet = sh.worksheet(TAB_NAME)
+    except:
+        worksheet = sh.add_worksheet(title=TAB_NAME, rows="2000", cols="8")
+        worksheet.append_row(["Observation_Label", "Geographic_Node", "Wind_Speed_knots", "Wind_Visual", "Wind_Direction_Text", "Wind_Direction_Deg", "Extracted_Date", "Extracted_Time"])
 
     new_rows = get_wind_data()
     if new_rows:
