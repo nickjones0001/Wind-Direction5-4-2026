@@ -13,9 +13,10 @@ DATA_TAB = "Wind+Dir"
 PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# Scaling Settings
-BASE_WIDTH = 1600      
-PIXELS_PER_ROW = 300    
+# --- TEST THESE VALUES ---
+# Try setting BASE_WIDTH to 2000 and PIXELS_PER_ROW to 10 to see a massive change
+BASE_WIDTH = 800      
+PIXELS_PER_ROW = 5    
 CHART_HEIGHT = 450    
 
 DIRECTION_ARROWS = {
@@ -58,14 +59,10 @@ def get_wind_data():
 def update_sheet():
     scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
     creds_json = os.environ.get('GOOGLE_CREDENTIALS')
-    if not creds_json: 
-        print("Credentials not found.")
-        return
+    if not creds_json: return
     
     creds_dict = json.loads(creds_json)
     creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-    
-    # Authorize gspread for data insertion
     client = gspread.authorize(creds)
     sh = client.open(SHEET_NAME)
     
@@ -80,7 +77,6 @@ def update_sheet():
         total_rows = len(all_data)
         dynamic_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
-        # Get metadata to find the chart
         metadata = sh.fetch_sheet_metadata()
         target_chart = None
         for sheet in metadata['sheets']:
@@ -92,7 +88,7 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
-            # Prepare the raw JSON request body
+            # This payload forces BOTH the data range and the physical dimensions
             requests_body = {
                 "requests": [
                     {
@@ -102,7 +98,6 @@ def update_sheet():
                                 "title": "Port Phillip Wind Speed (Knots)",
                                 "basicChart": {
                                     "chartType": "LINE",
-                                    "legendPosition": "BOTTOM_LEGEND",
                                     "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
                                     "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
                                 }
@@ -117,36 +112,32 @@ def update_sheet():
                                     "anchorCell": {
                                         "sheetId": pivot_ws.id, 
                                         "rowIndex": 0,
-                                        "columnIndex": 6
+                                        "columnIndex": 6 # Column G
                                     },
                                     "widthPixels": dynamic_width,
                                     "heightPixels": int(CHART_HEIGHT)
                                 }
                             },
-                            "fields": "newPosition.overlayPosition"
+                            "fields": "newPosition.overlayPosition" # Forces update of anchor and size
                         }
                     }
                 ]
             }
             
-            # Manually get a fresh access token to bypass gspread's formatting
             auth_req = google.auth.transport.requests.Request()
             creds.refresh(auth_req)
-            
-            headers = {
-                "Authorization": f"Bearer {creds.token}",
-                "Content-Type": "application/json"
-            }
-            
+            headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
             url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
-            api_res = requests.post(url, headers=headers, data=json.dumps(requests_body))
             
-            if api_res.status_code == 200:
-                print(f"Success: Updated row {total_rows} and widened chart to {dynamic_width}px.")
+            # Send and check response
+            response = requests.post(url, headers=headers, data=json.dumps(requests_body))
+            
+            if response.status_code == 200:
+                print(f"SUCCESS: Data at row {total_rows}. Target width: {dynamic_width}px.")
             else:
-                print(f"API Error: {api_res.status_code} - {api_res.text}")
+                print(f"STRETCH FAILED: {response.status_code} - {response.text}")
         else:
-            print("No chart found on Pivot tab.")
+            print("CHART NOT FOUND: Ensure a chart exists on the 'Wind+Dir-Pivot' tab.")
 
 if __name__ == "__main__":
     update_sheet()
