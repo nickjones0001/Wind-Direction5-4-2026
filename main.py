@@ -11,9 +11,16 @@ SHEET_NAME = "Wind+WaveScrapeLLM 28-3-2026"
 DATA_TAB = "Wind+Dir"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-DIRECTION_ARROWS = {"N":"↑","NNE":"↗","NE":"↗","ENE":"→","E":"→","ESE":"↘","SE":"↘","SSE":"↓","S":"↓","SSW":"↙","SW":"↙","WSW":"←","W":"←","WNW":"↖","NW":"↖","NNW":"↑","CALM":"○"}
+# Arrows now point in the direction the wind is blowing TOWARDS
+DIRECTION_ARROWS = {
+    "N": "↓", "NNE": "↙", "NE": "↙", "ENE": "←",
+    "E": "←", "ESE": "↖", "SE": "↖", "SSE": "↑",
+    "S": "↑", "SSW": "↗", "SW": "↗", "WSW": "→",
+    "W": "→", "WNW": "↘", "NW": "↘", "NNW": "↓",
+    "CALM": "○", "-": "-"
+}
 
-# CORRECTED MARITIME STATIONS
+# CORRECT MARITIME STATIONS
 STATIONS = {
     "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.95872.json",
     "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94853.json",
@@ -40,7 +47,7 @@ def get_wind_data():
                 f"{raw_ts[8:10]}:{raw_ts[10:12]}",           # B: Time
                 name,                                        # C: Station
                 float(latest_obs.get('wind_spd_kt', 0)),     # D: Speed (Knots)
-                DIRECTION_ARROWS.get(latest_obs.get('wind_dir', '-'), "-"), # E: Visual
+                DIRECTION_ARROWS.get(latest_obs.get('wind_dir', '-'), "-"), # E: Visual Arrow
                 latest_obs.get('wind_dir', '-'),             # F: Text Dir
                 now_melbourne.strftime("%Y-%m-%d"),          # G: Scraping Date
                 now_melbourne.strftime("%H:%M:%S"),          # H: Scraping Time
@@ -68,7 +75,7 @@ def update_sheet():
         new_data = get_wind_data()
         if new_data:
             ws.insert_rows(new_data, row=2)
-            print(f"Success: Updated with Maritime IDs 95872, 94853, 94871")
+            print("Success: Data added with flipped 'Blowing To' arrows.")
             
     except Exception as e:
         print(f"Sheet Update Error: {e}")
