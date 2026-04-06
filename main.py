@@ -13,10 +13,10 @@ DATA_TAB = "Wind+Dir"
 PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# --- TEST VALUES ---
-# I have set these high so you can definitively see the change
-BASE_WIDTH = 2000      
-PIXELS_PER_ROW = 5    
+# --- STRESS TEST VALUES ---
+# Setting these very high to force a visible change
+BASE_WIDTH = 2500      
+PIXELS_PER_ROW = 10    
 CHART_HEIGHT = 500    
 
 DIRECTION_ARROWS = {
@@ -75,8 +75,7 @@ def update_sheet():
         
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
-        # Calculate width
-        calculated_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
+        calc_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
         metadata = sh.fetch_sheet_metadata()
         target_chart = None
@@ -89,6 +88,7 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
+            # THE FORCE UPDATE PAYLOAD
             requests_body = {
                 "requests": [
                     {
@@ -114,13 +114,11 @@ def update_sheet():
                                         "rowIndex": 0,    # Row 1
                                         "columnIndex": 6  # Column G
                                     },
-                                    "offsetXPixels": 0,
-                                    "offsetYPixels": 0,
-                                    "widthPixels": calculated_width,
+                                    "widthPixels": calc_width,
                                     "heightPixels": int(CHART_HEIGHT)
                                 }
                             },
-                            "fields": "newPosition.overlayPosition" # Forces the anchor and size update
+                            "fields": "newPosition" # Aggressive mask to overwrite all position properties
                         }
                     }
                 ]
@@ -134,11 +132,11 @@ def update_sheet():
             response = requests.post(url, headers=headers, data=json.dumps(requests_body))
             
             if response.status_code == 200:
-                print(f"Update Successful. Row count: {total_rows}. Width applied: {calculated_width}px.")
+                print(f"SUCCESS: Data updated. Force-applied width: {calc_width}px.")
             else:
-                print(f"Update Failed: {response.status_code} - {response.text}")
+                print(f"ERROR {response.status_code}: {response.text}")
         else:
-            print("Chart not found. Double check the tab name and ensure a chart exists.")
+            print(f"CHART NOT FOUND on tab '{PIVOT_TAB}'.")
 
 if __name__ == "__main__":
     update_sheet()
