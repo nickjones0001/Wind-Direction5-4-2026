@@ -87,7 +87,7 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
-            # Using raw dict to prevent gspread from renaming keys to snake_case
+            # Formulate the raw JSON request
             requests_body = {
                 "requests": [
                     {
@@ -124,9 +124,9 @@ def update_sheet():
                 ]
             }
             
-            # Use raw request to bypass gspread's internal key conversion
+            # Send the request directly via the client's internal request method
             url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
-            client.request("post", url, json=requests_body)
+            sh.client.request("post", url, json=requests_body)
             
             print(f"Success: Updated row {total_rows} and stretched chart to {dynamic_width}px.")
         else:
