@@ -15,7 +15,7 @@ TIMEZONE = pytz.timezone('Australia/Melbourne')
 
 # --- TEST THESE VALUES ---
 # Try setting BASE_WIDTH to 2000 and PIXELS_PER_ROW to 10 to see a massive change
-BASE_WIDTH = 800      
+BASE_WIDTH = 1800      
 PIXELS_PER_ROW = 5    
 CHART_HEIGHT = 450    
 
