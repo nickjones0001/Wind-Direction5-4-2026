@@ -95,7 +95,7 @@ def update_sheet():
                             "spec": {
                                 "title": "Port Phillip Wind Speed (Knots)",
                                 "basicChart": {
-                                    "chartType": "LINE",  # Explicitly defined to fix 400 error
+                                    "chartType": "LINE",
                                     "legendPosition": "BOTTOM_LEGEND",
                                     "domains": [
                                         {
@@ -152,4 +152,9 @@ def update_sheet():
                 ]
             }
             sh.batch_update(requests_body)
-            print(f"Successfully updated row {total_rows} and stretched chart
+            print(f"Success: Updated row {total_rows} and stretched chart to {dynamic_width}px.")
+        else:
+            print("No chart found on Pivot tab.")
+
+if __name__ == "__main__":
+    update_sheet()
