@@ -74,7 +74,6 @@ def update_sheet():
         
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
-        # Ensure width is an integer
         dynamic_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
         metadata = sh.fetch_sheet_metadata()
@@ -88,7 +87,7 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
-            # Request payload using strict Google API camelCase keys
+            # Using raw dict to prevent gspread from renaming keys to snake_case
             requests_body = {
                 "requests": [
                     {
@@ -99,37 +98,8 @@ def update_sheet():
                                 "basicChart": {
                                     "chartType": "LINE",
                                     "legendPosition": "BOTTOM_LEGEND",
-                                    "domains": [
-                                        {
-                                            "domain": {
-                                                "sourceRange": {
-                                                    "sources": [{
-                                                        "sheetId": data_ws.id, 
-                                                        "startRowIndex": 0, 
-                                                        "endRowIndex": total_rows, 
-                                                        "startColumnIndex": 8, 
-                                                        "endColumnIndex": 9
-                                                    }]
-                                                }
-                                            }
-                                        }
-                                    ],
-                                    "series": [
-                                        {
-                                            "series": {
-                                                "sourceRange": {
-                                                    "sources": [{
-                                                        "sheetId": data_ws.id, 
-                                                        "startRowIndex": 0, 
-                                                        "endRowIndex": total_rows, 
-                                                        "startColumnIndex": 3, 
-                                                        "endColumnIndex": 4
-                                                    }]
-                                                }
-                                            },
-                                            "targetAxis": "LEFT_AXIS"
-                                        }
-                                    ]
+                                    "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
+                                    "series": [{"series": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 3, "endColumnIndex": 4}]}}, "targetAxis": "LEFT_AXIS"}]
                                 }
                             }
                         }
@@ -153,7 +123,11 @@ def update_sheet():
                     }
                 ]
             }
-            sh.batch_update(requests_body)
+            
+            # Use raw request to bypass gspread's internal key conversion
+            url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
+            client.request("post", url, json=requests_body)
+            
             print(f"Success: Updated row {total_rows} and stretched chart to {dynamic_width}px.")
         else:
             print("No chart found on Pivot tab.")
