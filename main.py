@@ -1,51 +1,64 @@
-import requests
-from bs4 import BeautifulSoup
 import gspread
 from google.oauth2.service_account import Credentials
+import requests
+import datetime
+import pytz
+import os
+import json
 
-# 1. SETUP GOOGLE SHEETS
-# Replace 'your-google-sheet-id' with your actual Sheet ID
-# Ensure credentials.json is in the same directory
-SHEET_ID = 'your-google-sheet-id'
-SCOPE = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+# Configuration
+SHEET_NAME = "Wind+WaveScrapeLLM 28-3-2026"
+DATA_TAB = "Wind+Dir"
+TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-def update_google_sheet(data):
-    creds = Credentials.from_service_account_file('credentials.json', scopes=SCOPE)
-    client = gspread.authorize(creds)
-    sheet = client.open_by_key(SHEET_ID).sheet1
-    # Appends a new row with the scraped data
-    sheet.append_row(data)
+DIRECTION_ARROWS = {"N":"↑","NNE":"↗","NE":"↗","ENE":"→","E":"→","ESE":"↘","SE":"↘","SSE":"↓","S":"↓","SSW":"↙","SW":"↙","WSW":"←","W":"←","WNW":"↖","NW":"↖","NNW":"↑","CALM":"○"}
 
-# 2. SCRAPE FRANKSTON BEACH DATA
-def scrape_frankston_data():
-    # Example URL for coastal observations (Substitute with specific maritime source if required)
-    url = "https://www.bom.gov.au/vic/observations/melbourne.shtml" 
+def get_wind_data():
+    results = []
+    now_melbourne = datetime.datetime.now(TIMEZONE)
     headers = {'User-Agent': 'Mozilla/5.0'}
-    
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.content, 'html.parser')
+    stations = {
+        "Frankston Beach": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94870.json",
+        "Fawkner Beacon": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94864.json",
+        "South Channel Island": "http://www.bom.gov.au/fwo/IDV60901/IDV60901.94857.json"
+    }
+    for name, url in stations.items():
+        try:
+            res = requests.get(url, headers=headers).json()
+            obs = res['observations']['data'][0]
+            ts = obs['local_date_time_full']
+            
+            # ISO-style format: YYYY-MM-DD HH:MM:SS
+            # This is the most "machine-readable" format for Google Sheets to auto-convert to Date/Time
+            iso_label = f"{ts[0:4]}-{ts[4:6]}-{ts[6:8]} {ts[8:10]}:{ts[10:12]}:00"
+            
+            results.append([
+                f"{ts[6:8]}/{ts[4:6]}/{ts[0:4]}", 
+                f"{ts[8:10]}:{ts[10:12]}", 
+                name,
+                float(obs.get('wind_spd_kt', 0)), 
+                DIRECTION_ARROWS.get(obs.get('wind_dir', '-'), "-"),
+                obs.get('wind_dir', '-'), 
+                now_melbourne.strftime("%Y-%m-%d"),
+                now_melbourne.strftime("%H:%M:%S"), 
+                iso_label # Column I
+            ])
+        except: continue
+    return results
 
-    # Target: Frankston (Note: Searching specifically for the Frankston row in the table)
-    # This logic looks for the specific station name in the table
-    try:
-        station_row = soup.find('th', string='Frankston Beach') or soup.find('a', string='Frankston')
-        parent_row = station_row.find_parent('tr')
-        cells = parent_row.find_all('td')
-        
-        # Data mapping based on BOM table structure
-        temp = cells[1].text
-        wind_dir = cells[3].text
-        wind_speed = cells[4].text
-        
-        data_to_log = ["Frankston Beach", temp, wind_dir, wind_speed]
-        return data_to_log
-    except Exception as e:
-        print(f"Error finding Frankston data: {e}")
-        return None
+def update_sheet():
+    creds_json = os.environ.get('GOOGLE_CREDENTIALS')
+    if not creds_json: return
+    creds = Credentials.from_service_account_info(json.loads(creds_json), 
+            scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+    client = gspread.authorize(creds)
+    sh = client.open(SHEET_NAME)
+    ws = sh.worksheet(DATA_TAB)
 
-# 3. EXECUTION
+    new_data = get_wind_data()
+    if new_data:
+        ws.insert_rows(new_data, row=2)
+        print("Data pushed. Ensure Column I is formatted as 'Date time' in Sheets.")
+
 if __name__ == "__main__":
-    extracted_data = scrape_frankston_data()
-    if extracted_data:
-        update_google_sheet(extracted_data)
-        print("Data successfully synced to Google Sheets.")
+    update_sheet()
