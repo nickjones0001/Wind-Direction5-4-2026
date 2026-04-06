@@ -15,7 +15,7 @@ TIMEZONE = pytz.timezone('Australia/Melbourne')
 
 # Scaling Settings
 BASE_WIDTH = 800      
-PIXELS_PER_ROW = 3    
+PIXELS_PER_ROW = 50    
 CHART_HEIGHT = 450    
 
 DIRECTION_ARROWS = {
