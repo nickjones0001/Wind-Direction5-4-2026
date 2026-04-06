@@ -13,11 +13,11 @@ DATA_TAB = "Wind+Dir"
 PIVOT_TAB = "Wind+Dir-Pivot"
 TIMEZONE = pytz.timezone('Australia/Melbourne')
 
-# --- TEST THESE VALUES ---
-# Try setting BASE_WIDTH to 2000 and PIXELS_PER_ROW to 10 to see a massive change
-BASE_WIDTH = 1800      
+# --- TEST VALUES ---
+# I have set these high so you can definitively see the change
+BASE_WIDTH = 2000      
 PIXELS_PER_ROW = 5    
-CHART_HEIGHT = 450    
+CHART_HEIGHT = 500    
 
 DIRECTION_ARROWS = {
     "N": "↑", "NNE": "↗", "NE": "↗", "ENE": "→",
@@ -75,7 +75,8 @@ def update_sheet():
         
         all_data = data_ws.get_all_values()
         total_rows = len(all_data)
-        dynamic_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
+        # Calculate width
+        calculated_width = int(BASE_WIDTH + (total_rows * PIXELS_PER_ROW))
 
         metadata = sh.fetch_sheet_metadata()
         target_chart = None
@@ -88,14 +89,13 @@ def update_sheet():
         if target_chart:
             chart_id = target_chart['chartId']
             
-            # This payload forces BOTH the data range and the physical dimensions
             requests_body = {
                 "requests": [
                     {
                         "updateChartSpec": {
                             "chartId": chart_id,
                             "spec": {
-                                "title": "Port Phillip Wind Speed (Knots)",
+                                "title": "Wind Speed Profile (Knots)",
                                 "basicChart": {
                                     "chartType": "LINE",
                                     "domains": [{"domain": {"sourceRange": {"sources": [{"sheetId": data_ws.id, "startRowIndex": 0, "endRowIndex": total_rows, "startColumnIndex": 8, "endColumnIndex": 9}]}}}],
@@ -111,14 +111,16 @@ def update_sheet():
                                 "overlayPosition": {
                                     "anchorCell": {
                                         "sheetId": pivot_ws.id, 
-                                        "rowIndex": 0,
-                                        "columnIndex": 6 # Column G
+                                        "rowIndex": 0,    # Row 1
+                                        "columnIndex": 6  # Column G
                                     },
-                                    "widthPixels": dynamic_width,
+                                    "offsetXPixels": 0,
+                                    "offsetYPixels": 0,
+                                    "widthPixels": calculated_width,
                                     "heightPixels": int(CHART_HEIGHT)
                                 }
                             },
-                            "fields": "newPosition.overlayPosition" # Forces update of anchor and size
+                            "fields": "newPosition.overlayPosition" # Forces the anchor and size update
                         }
                     }
                 ]
@@ -129,15 +131,14 @@ def update_sheet():
             headers = {"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"}
             url = f"https://sheets.googleapis.com/v4/spreadsheets/{sh.id}:batchUpdate"
             
-            # Send and check response
             response = requests.post(url, headers=headers, data=json.dumps(requests_body))
             
             if response.status_code == 200:
-                print(f"SUCCESS: Data at row {total_rows}. Target width: {dynamic_width}px.")
+                print(f"Update Successful. Row count: {total_rows}. Width applied: {calculated_width}px.")
             else:
-                print(f"STRETCH FAILED: {response.status_code} - {response.text}")
+                print(f"Update Failed: {response.status_code} - {response.text}")
         else:
-            print("CHART NOT FOUND: Ensure a chart exists on the 'Wind+Dir-Pivot' tab.")
+            print("Chart not found. Double check the tab name and ensure a chart exists.")
 
 if __name__ == "__main__":
     update_sheet()
